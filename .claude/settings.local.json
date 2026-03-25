@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(cp:*)",
+      "Bash(grep:*)",
+      "Bash(pip:*)",
+      "Bash(where java:*)",
+      "Bash(python:*)",
+      "Bash(shuf -n 3)",
+      "Read(//c/Users/pbubula/OneDrive - Occubee/Pulpit/occubee/Occubee/**)",
+      "Read(//tmp/**)",
+      "Bash(head:*)",
+      "Bash(for f:*)",
+      "Bash(ls:*)",
+      "Bash(where az:*)"
+    ]
+  }
+}

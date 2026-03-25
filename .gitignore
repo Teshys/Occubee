@@ -1,0 +1,7 @@
+.claude-memory
+__pycache__/
+*.pyc
+**/data/
+otcf4f/occubee/
+otcf4f/custom_scripts/lib/
+otcf4f/custom_scripts/backup/

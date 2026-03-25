@@ -1,0 +1,395 @@
+================================================================================
+DIAGNOSTYKA BŁĘDÓW PRZELICZNIKÓW JEDNOSTEK — KAZAR
+Data rozpoczęcia diagnostyki: 2026-03-19/20
+Autor: Patryk Bubula + Claude Code
+================================================================================
+
+1. OPIS PROBLEMU
+================================================================================
+
+Od dnia 12.03.2026 w systemie Occubee (klient Kazar) pojawiają się błędy
+przeliczników jednostek:
+
+  - RD1003 (store_stock_level): "Brak przelicznika jednostki dla produktu"
+    → 32 produkty (stany sklepowe)
+  - RD1001 (picking_orders_in_transit): "Brak przelicznika jednostki dla produktu"
+    → 48 produktów (towary w tranzycie / polecenia komisjonowania)
+  - FRO1003 (polecenie komisjonowania): "Brak przelicznika z jednostki stanu
+    magazynowego do jednostki sprzedażowej"
+    → Magazyny NMZK i NMKC, konwersja Sztuka → Para
+  - FRO1004 (polecenie komisjonowania): "Brak przelicznika z jednostki stanu
+    sklepowego do jednostki sprzedażowej"
+    → Sklep ZOK (DESIGNER OUTLET KRAKÓW), konwersja Sztuka → Para
+  - FRO1008 (polecenie komisjonowania): "Brak przelicznika z jednostki towaru
+    w drodze do jednostki sprzedażowej produktu"
+    → Sklepy NZIK (SKLEP INTERNETOWY KAZAR) i NZIK_ZLD (ZALANDO)
+    → 48 błędów z 20.03.2026
+
+Błędy rosną z dnia na dzień — nowe produkty dochodzą, żaden nie odpada.
+Eskalacja błędów:
+  - 12.03: FRO1003 — tylko magazyn NMZK, 6 wariantów (86102)
+  - 18.03: FRO1004 — sklep ZOK, nowe produkty (41490, 89146, 60134, 89095)
+  - 19.03: FRO1003 — magazyny NMZK + NMKC, 23 błędów (86102, 96509, 96510)
+  - 20.03: FRO1008 — sklepy internetowe NZIK + NZIK_ZLD, 48 błędów (96509, 96510)
+
+
+2. DOTKNIĘTE PRODUKTY (znane kody)
+================================================================================
+
+Kody parent productów z błędami (6 parentów, rozszerzono 20.03):
+  - 86102 (Ladies shoes JOSEFIN, ZŁOTY, rozmiary 35-40) — NIEAKTYWNY, modyfikowany ~8 mies. temu
+  - 96509 (Ladies shoes KS MARGIE, CZARNY + JASNONIEBIESKI, rozm. 35-41)
+  - 96510 (Ladies shoes KS EDITTE, OFF WHITE + JASNONIEBIESKI, rozm. 35-40)
+  - 60134 (Ladies accessories FRIO, KARMELOWY, rozmiar S)
+  - 41490 (Ladies shoes SIMONETTA, BRĄZOWY, rozmiar 37) — nowy od 18.03
+  - 89146 (Ladies accessories, RUDY, rozmiar M) — nowy od 18.03
+  - 89095 (Men's shoes TRUXTON, BRĄZOWY, rozmiar 42) — nowy od 18.03
+
+Pełna lista błędnych wariantów z logów (12.03 – 20.03):
+
+  FRO1003 — 12.03.2026 (magazyn NMZK):
+    86102-XX-13/35, /36, /37, /38, /39, /40
+
+  FRO1004 — 18.03.2026 (sklep ZOK = DESIGNER OUTLET KRAKÓW):
+    41490-Z2-02/37, 89146-TT-18/M, 60134-01-24/S, 89095-XX-02/42
+
+  FRO1003 — 19.03.2026 (magazyny NMZK + NMKC, 23 błędy):
+    86102-XX-13/35, /36, /37, /38, /39, /40 (NMZK)
+    96509-01-85/37, /38, /39, /40 (NMKC)
+    96509-01-00/36, /37, /38, /39, /40 (NMKC)
+    96510-08-85/37, /38, /39, /40 (NMKC)
+    96510-01-B6/37, /38, /39, /40 (NMKC)
+
+  FRO1008 — 20.03.2026 (sklepy internetowe NZIK + NZIK_ZLD, 48 błędów):
+    96509-01-00/36, /37, /38 (NZIK + NZIK_ZLD)
+    96509-01-85/35, /36, /38, /40, /41 (NZIK + NZIK_ZLD)
+    96510-01-B6/35, /36, /38, /39, /40 (NZIK + NZIK_ZLD)
+    96510-08-85/36, /37, /38, /39 (NZIK + NZIK_ZLD)
+
+Typ błędu: Sztuka (jednostka stanu mag./sklepowego/towaru w drodze) → Para (jedn. sprzedażowa)
+  → System nie znajduje przelicznika SZT→PAR mimo że powinien istnieć
+
+
+3. CO SPRAWDZONO I WYELIMINOWANO
+================================================================================
+
+3.1. Czy produkty mają przypisaną grupę przelicznikową?
+  → TAK. Produkty 96509, 96510, 60134 mają unit_conversion_group_code = SZT_PARA
+  → Sprawdzone przez export ze słownika produktów (export_dictionary.py)
+  → Kolumny: code, unit_of_measure_code (PAR), unit_conversion_group_code (SZT_PARA)
+
+3.2. Czy grupa SZT_PARA zawiera przelicznik SZT→PAR?
+  → TAK. Grupa SZT_PARA zawiera 4 przeliczniki:
+     - Sztuka → Para, przelicznik = 1
+     - Sztuka → 5pak, przelicznik = 5
+     - Sztuka → 6pak, przelicznik = 6
+     - Sztuka → 12pak, przelicznik = 12
+  → 302 679 produktów jest przypisanych do tej grupy
+  → Sprawdzone w GUI Occubee
+
+3.3. Czy przelicznik ma ograniczenia dat obowiązywania?
+  → NIE. Brak wpisanych dat obowiązywania (nieograniczone).
+
+3.4. Czy istnieje przelicznik odwrotny (PAR→SZT)?
+  → TAK. Occubee wyświetla komunikat "Na liście jest już zdefiniowane
+     przeliczenie odwrotne" przy próbie dodania PAR→SZT.
+  → System automatycznie rozpoznaje odwrotności.
+
+3.5. Czy stany sklepowe (store_stock_level) wysyłają właściwą jednostkę?
+  → TAK. Stany sklepowe dla błędnych produktów mają unit_of_measure_code = SZT.
+  → Sprawdzone przez export słownika store_stock_level.
+
+3.6. Czy produkty mają indywidualne przeliczniki na zakładce "Przeliczenia jednostek"?
+  → NIE (puste) — ale to jest NORMALNE. Starsze, działające produkty też mają
+     tę zakładkę pustą. Przeliczniki działają przez grupę (SZT_PARA),
+     nie przez indywidualne wpisy na produkcie.
+
+3.7. Weryfikacja GUI produktu 86102 (sprawdzono 20.03.2026):
+  → Grupa przelicznikowa: SZT_PARA — WPISANA poprawnie
+  → Zakładka "Przeliczenia jednostek": PUSTA (normalne, jak u innych)
+  → Jednostka sprzedaży: PARA
+  → Jednostka stanu magazynowego: BRAK w podglądzie (!)
+  → Status: NIEAKTYWNY
+  → Ostatnia modyfikacja: ~8 miesięcy temu (ok. lipiec/sierpień 2025)
+  → UWAGA: Produkt nieaktywny i dawno niemodyfikowany — a mimo to błęduje
+
+3.8. Czy błędne produkty były w importach CSV z 11.03 lub 12.03?
+  → NIE! Produkty 86102, 96509, 96510, 60134 NIE występują w żadnym z plików
+     importu produktów (ani z 11.03 ani z 12.03).
+  → Te produkty istniały w systemie wcześniej i nie były modyfikowane importem.
+
+
+4. PORÓWNANIE IMPORTÓW CSV: 11.03 vs 12.03
+================================================================================
+
+Pliki importu produktów (zapisane w otcf4f/custom_scripts/data/):
+  - kazar_import_1103.csv → 273 produkty (warianty), 75 unikalnych parentów
+  - kazar_import_1203.csv → 770 produktów (wariantów), 123 unikalne parenty
+
+Kluczowe różnice:
+  - 12.03 importuje ZNACZNIE więcej produktów (770 vs 273)
+  - Prawie BRAK wspólnych produktów: tylko 1 wspólny parent, 7 wspólnych wariantów
+  - 11.03: głównie nowe produkty sezonu WL26/JZ26 (torebki, buty)
+  - 12.03: głównie starsze produkty BASIC/wielosezonowe z połówkowymi rozmiarami
+    (35,5 / 36,5 / 37,5 itd.)
+
+Struktura kolumn: identyczna (39 kolumn) w obu plikach.
+Separator: średnik (;)
+Kodowanie: UTF-8 BOM
+Wszystkie produkty w obu plikach: unit_conversion_group_code = SZT_PARA
+
+Typy produktów w plikach:
+  - Buty (unit_of_measure_code = PAR)
+  - Torebki/akcesoria (unit_of_measure_code = SZT)
+  - Tkaniny (unit_of_measure_code = MB)
+
+
+5. KLUCZOWE OBSERWACJE I HIPOTEZY DO SPRAWDZENIA
+================================================================================
+
+5.1. FAKT: Błędy zaczęły się dokładnie 12.03.2026
+  → Przed 12.03 system działał bez błędów przeliczników
+  → Pierwszym błędnym produktem był 86102 (JOSEFIN)
+  → Z dnia na dzień dochodzą nowe produkty, żaden nie odpada
+
+5.2. FAKT: Błędne produkty NIE były importowane 11.03 ani 12.03
+  → Cokolwiek wywołało problem, NIE jest to bezpośrednia zmiana na tych produktach
+  → Problem musi mieć przyczynę pośrednią (systemową lub grupową)
+
+5.3. FAKT: Plik 12.03 jest radykalnie inny od pliku 11.03
+  → Prawie zerowy overlap (1 wspólny parent)
+  → 12.03 importuje dużo starszych produktów BASIC z połówkami rozmiarów
+
+5.4. HIPOTEZA (do sprawdzenia): Import z 12.03 mógł nadpisać/zresetować
+     konfigurację grupy SZT_PARA
+  → Jeśli masowy import produktów z SZT_PARA wpływa na definicję grupy,
+     mógł uszkodzić przelicznik dla INNYCH produktów korzystających z tej grupy
+  → Do sprawdzenia: czy przelicznik SZT→PAR w grupie SZT_PARA nadal wynosi 1?
+  → Do sprawdzenia: historia zmian grupy SZT_PARA w Occubee
+
+5.5. HIPOTEZA (do sprawdzenia): Problem z produktami o połówkowych rozmiarach
+  → 12.03 wprowadza rozmiary 35,5 / 36,5 / 37,5 itd.
+  → Czy przecinek w rozmiarze mógł spowodować problem z parsowaniem CSV
+     i uszkodzić dane unit_conversion_group_code?
+
+5.6. OBALONA: Problem z JEDNYM magazynem NMZK
+  → Błędy NIE dotyczą tylko NMZK — pojawiają się także w:
+     NMKC (magazyn), ZOK (sklep DESIGNER OUTLET KRAKÓW),
+     NZIK (sklep internetowy Kazar), NZIK_ZLD (Zalando)
+  → Problem jest SYSTEMOWY, nie związany z konkretnym magazynem/sklepem
+
+5.7. HIPOTEZA (do sprawdzenia): Cache/indeks przeliczników
+  → Czy Occubee cachuje przeliczniki i duży import mógł unieważnić cache?
+  → Czy restart usługi/serwera Occubee mógłby pomóc?
+
+5.8. POTWIERDZONE: Wszystkie 32 błędne warianty mają is_active = False
+  → WSZYSTKIE 32 warianty z logów błędów: is_active = False
+  → ALE: ich produkty nadrzędne (parent) są AKTYWNE (Aktywny = Tak)
+  → ALE: w obrębie tych samych parentów inne warianty też są nieaktywne
+     i NIE błędują (np. 86102-XX-13/41 jest False ale nie ma błędu)
+  → WNIOSEK: is_active=False jest warunkiem KONIECZNYM ale NIE WYSTARCZAJĄCYM
+  → Błędują tylko te nieaktywne warianty, które mają fizyczny stock w ruchu
+     (picking orders, towary w drodze, stany sklepowe)
+
+5.9. NOWA OBSERWACJA: Trzy różne kody błędów, różne konteksty
+  → FRO1003 = brak przelicznika jedn. stanu MAGAZYNOWEGO → sprzedażowej
+  → FRO1004 = brak przelicznika jedn. stanu SKLEPOWEGO → sprzedażowej
+  → FRO1008 = brak przelicznika jedn. TOWARU W DRODZE → sprzedażowej
+  → Wszystkie mają wspólny mianownik: system nie może przeliczyć SZT→PAR
+  → Potwierdza problem SYSTEMOWY z resolverem przeliczników, nie z danymi
+
+5.10. ANALIZA DANYCH Z AZURE + GUI (sesja 3, 20.03.2026)
+  Źródła: kazar_diag_product.csv (302 709 wariantów), Produkty nadrzędne.xlsx
+          (87 175 parentów), Jednostki miary.xlsx, Przeliczenia jednostek.xlsx,
+          sklepy.parquet (114 sklepów)
+
+  a) Produkty (warianty) — 302 709:
+     - 232 178 aktywnych, 70 531 nieaktywnych
+     - WSZYSTKIE mają unit_conversion_group_code = SZT_PARA (jedyna grupa)
+     - Jednostki: PAR (260 290), SZT (42 395), MB (24)
+
+  b) Produkty nadrzędne — 87 175:
+     - 87 174 aktywnych, 1 nieaktywny ("do usunięcia" — testowy)
+     - Błędne parenty: WSZYSTKIE 9 SĄ AKTYWNE
+     - 8 z 9 błędnych parentów ma datę modyfikacji 2026-03-18 01:15:13 (!)
+       (automatyczna aktualizacja? batch?)
+     - 86102-XX-13 modyfikowany 2025-06-30 (8 mies. temu)
+
+  c) Przeliczenia jednostek (grupy) — 4 wpisy:
+     - SZT_PARA: AKTYWNA, 4 pozycje, zmodyfikowana 2026-03-18 11:10:06
+       przez Izabelę Kwaśniak
+     - 5pak, 6pak, 12pak: NIEAKTYWNE (!), zmodyfikowane 2026-03-18 11:11:44
+       przez Izabelę Kwaśniak
+     → UWAGA: Ktoś modyfikował grupy przelicznikowe 18.03 — po rozpoczęciu błędów!
+       Czy to próba naprawy? Czy to spowodowało eskalację?
+
+  d) Jednostki miary — 15 jednostek:
+     - PAR: sprzedażowa TAK, magazynowa TAK
+     - SZT: sprzedażowa TAK, magazynowa TAK
+     - MB: zmodyfikowane 2026-03-11 08:55:34 przez Patryk Bubula
+     - 5pak, 6pak, 12pak: zmodyfikowane 2026-03-10 przez Patryk Bubula
+     → UWAGA: Jednostki 5pak/6pak/12pak i MB modyfikowane 10-11.03 — DZIEŃ
+       PRZED rozpoczęciem błędów! Czy ta zmiana mogła wpłynąć?
+
+  e) Sklepy — 114:
+     - NMZK, NMKC: NIE ZNALEZIONE w słowniku MOS (to MAGAZYNY, nie sklepy)
+     - ZOK (DESIGNER OUTLET KRAKÓW): aktywny, otwarty 2025-05-09
+     - NZIK (SKLEP INTERNETOWY KAZAR): aktywny, otwarty 2023-12-20
+     - NZIK_ZLD (ZALANDO): aktywny, otwarty 2014-01-02
+
+  f) Porównanie błędnych vs nieaktywnych ogólnie:
+     - Jest 70 531 nieaktywnych wariantów, ale tylko 32 błęduje
+     - W obrębie tego samego parenta: inne nieaktywne warianty NIE błędują
+       (bo prawdopodobnie nie mają stocku w ruchu)
+
+5.11. POTWIERDZONA SEKWENCJA ZMIAN (kluczowa oś czasu):
+
+  a) 10.03 — Patryk Bubula:
+     - Utworzył nowe jednostki miary: 5pak, 6pak, 12pak
+       (flagi: sprzedażowa=TAK, magazynowa=TAK)
+     - Dodał przeliczenia: SZT→5pak=5, SZT→6pak=6, SZT→12pak=12
+       do grupy SZT_PARA (która wcześniej miała TYLKO SZT→PAR=1)
+     - Wyeksportował CAŁY asortyment handlowy z GUI
+     - Uzupełnił kolumny J (logistic_minimum_value=1) i K
+       (logistic_minimum_unit_code=5pak/6pak/12pak) dla 80 produktów
+       (to paki — rajstopy, skarpetki itp.)
+     - Zaimportował CAŁY asortyment z powrotem do GUI
+       (58 014 wpisów, 11 346 parentów)
+
+  b) 11.03 — Patryk Bubula:
+     - Zmodyfikował jednostkę MB
+
+  c) 12.03 — ZACZĘŁY SIĘ BŁĘDY
+     - FRO1003: 86102-XX-13 (6 wariantów, magazyn NMZK)
+     - Tego samego dnia: import kazar_import_1203.csv (770 produktów)
+
+  d) 18.03 — Izabela Kwaśniak:
+     - Zmodyfikowała grupę SZT_PARA (czas: 11:10:06)
+     - Dezaktywowała grupy 5pak, 6pak, 12pak (czas: 11:11:44)
+     - Możliwa próba naprawy — ALE błędy się pogorszyły po tym
+     - Tego samego dnia: FRO1004 na ZOK (nowe produkty: 41490, 89146, etc.)
+
+  e) 19.03 — eskalacja do NMZK + NMKC, 23 błędy
+  f) 20.03 — eskalacja do NZIK + NZIK_ZLD, 48 błędów
+
+5.12. ANALIZA ASORTYMENTU HANDLOWEGO (58 014 wpisów):
+  → Błędne produkty SĄ w asortymencie (6 z 9 parentów znalezionych)
+  → 86102-XX-13 i 41490-Z2-02: przypisane do mag. NMZK i NMKC
+    (asortymenty OD_OUTLET_HU/PL_SEASON_WL26)
+  → 96509, 96510: przypisane do asortymentów OD_AYF, OD_ZALANDO, OD_ONLINE
+  → 89146, 89095, 60134: BRAK w asortymencie (błąd FRO1004 na ZOK)
+  → Żaden błędny produkt NIE ma wypełnionych kol. J,K (logistic minimum)
+  → W asortymencie jest 224 parentów z WSZYSTKIMI wariantami nieaktywnymi,
+    ale tylko 6 z nich błęduje (te z fizycznym stockiem w ruchu)
+
+5.13. HIPOTEZA (NAJSILNIEJSZA): Reimport asortymentu 10.03 uszkodził powiązania
+  → Import CAŁEGO asortymentu (58K wpisów) mógł nadpisać/zresetować
+     konfigurację przeliczników dla produktów, które nie miały wypełnionych
+     kolumn J,K (logistic_minimum_unit_code)
+  → Kolumny J,K w asortymencie dotyczą logistycznych minimów (paki),
+     ALE import mógł mieć side-effect na resolver przeliczników
+  → Alternatywnie: dodanie SZT→5pak/6pak/12pak do grupy SZT_PARA
+     mogło stworzyć wieloznaczność w resolverze (wiele cel. jednostek)
+  → Iza wspomniała o problemie "w dwie strony" — możliwe że dodanie
+     nowych konwersji stworzyło konflikt kierunkowości
+
+5.14. KWESTIA IZABELI — "w dwie strony":
+  → Iza mówiła o tym, że "w dwie strony może to jest niezdefiniowane
+     i nie wiadomo która strona jest poprawna"
+  → Możliwe: dodanie SZT→5pak, SZT→6pak, SZT→12pak do grupy SZT_PARA
+     stworzyło sytuację gdzie z SZT można przeliczać na PAR, 5pak, 6pak, 12pak
+  → Dla produktu z unit_of_measure=PAR, konwersja SZT→PAR jest jednoznaczna
+  → ALE: czy Occubee resolverem próbuje odwrotnie (PAR→SZT)?
+     Teraz PAR→SZT=1 ale też 5pak→SZT=1/5 itd.
+  → Możliwy bug: resolver przeliczników nie potrafi wybrać ścieżki
+     gdy jest wiele opcji konwersji w grupie
+
+
+6. REKOMENDOWANE KOLEJNE KROKI
+================================================================================
+
+PRIORYTET 1 — SPRAWDZONO:
+  [x] Produkt 86102 w GUI: grupa SZT_PARA wpisana, zakładka przeliczników pusta,
+      jedn. sprzedaży PARA, NIEAKTYWNY, modyfikowany 8 mies. temu
+  [x] is_active: WSZYSTKIE 32 błędne warianty = False, parenty = True
+  [x] Porównanie z innymi nieaktywnymi: 70 531 nieaktywnych wariantów,
+      tylko 32 błęduje (te z fizycznym stockiem w ruchu)
+  [x] Pełna analiza danych z Azure (302 709 wariantów, 87 175 parentów)
+
+PRIORYTET 1 — WYJAŚNIONE:
+  [x] Co zmieniłeś 10-11.03: utworzono jednostki 5pak/6pak/12pak, dodano
+      do SZT_PARA jako konwersje, zaimportowano cały asortyment z pakami
+  [x] Co robiła Iza 18.03: dezaktywowała grupy 5pak/6pak/12pak,
+      modyfikowała SZT_PARA — prawdopodobnie próba naprawy (bezskuteczna)
+
+PRIORYTET 1 — DO WYKONANIA TERAZ:
+  [ ] PRÓBA NAPRAWY A: Usunąć z grupy SZT_PARA pozycje SZT→5pak, SZT→6pak,
+      SZT→12pak (zostawić TYLKO SZT→PAR=1). Przywrócić stan sprzed 10.03.
+      → Jeśli to nie pomoże od razu, dać 24h na przebudowę indeksu
+  [ ] PRÓBA NAPRAWY B: Jeśli A nie pomoże, otworzyć jeden błędny produkt
+      (np. 86102-XX-13/38) i ręcznie dodać przelicznik SZT→PAR=1 na
+      zakładce "Przeliczenia jednostek" (indywidualny, nie grupowy)
+      → Sprawdzić czy błąd zniknie dla tego jednego produktu
+  [ ] Sprawdzić w audycie Occubee: czy import asortymentu z 10.03 jest
+      widoczny w logach i czy nie ma tam side-effectów
+
+PRIORYTET 2 (eskalacja do supportu Occubee):
+  [ ] Zgłosić z PEŁNYM opisem — template zgłoszenia:
+      ---
+      PROBLEM: Od 12.03 błędy FRO1003/FRO1004/FRO1008 — "Brak przelicznika
+      z jednostki stanu magazynowego/sklepowego/towaru w drodze do jednostki
+      sprzedażowej" dla konwersji Sztuka → Para.
+
+      DOTYCZY: 32+ warianty produktów (9 parentów), nieaktywne warianty
+      z aktywnym parentem, mające fizyczny stock w ruchu. Magazyny NMZK,
+      NMKC; sklepy ZOK, NZIK, NZIK_ZLD.
+
+      KONFIGURACJA: Produkty mają unit_conversion_group_code = SZT_PARA,
+      grupa SZT_PARA jest aktywna i zawiera przelicznik SZT→PAR=1
+      (bez ograniczeń dat). Przelicznik widoczny i poprawny w GUI.
+
+      TRIGGER: 10.03 dodano nowe przeliczenia (SZT→5pak=5, SZT→6pak=6,
+      SZT→12pak=12) do grupy SZT_PARA + reimport całego asortymentu
+      handlowego (58K wpisów). Błędy pojawiły się 12.03. Dezaktywacja
+      dodanych konwersji 18.03 nie pomogła — błędy się nasiliły.
+
+      PYTANIE: Czy dodanie wielu konwersji do grupy SZT_PARA mogło
+      spowodować błąd w resolverze przeliczników? Czy reimport asortymentu
+      mógł mieć side-effect na powiązania przelicznikowe?
+      ---
+
+PRIORYTET 3 (jeśli powyższe nie pomogą):
+  [ ] Rozważyć przywrócenie pełnego asortymentu z backup sprzed 10.03
+  [ ] Poprosić support o ręczną przebudowę indeksu przeliczników
+
+
+7. NARZĘDZIA UŻYTE W DIAGNOSTYCE
+================================================================================
+
+  - export_dictionary.py (generic_da_labs/sandbox/patryk/tools/)
+    → Eksport danych z Azure Data Lake (słowniki Occubee)
+    → Zmodyfikowany w trakcie diagnostyki aby obsługiwać Spark DataFrames
+    → Użycie: python export_dictionary.py <słownik> [--filter] [--columns] [--export]
+    → Środowisko: serwer ocb-da-onprem-01, conda env da_env
+
+  - GUI Occubee → weryfikacja przeliczników, grup, produktów
+
+  - Pliki CSV importu produktów → porównanie 11.03 vs 12.03
+
+
+8. PLIKI ZWIĄZANE Z DIAGNOSTYKĄ
+================================================================================
+
+  otcf4f/custom_scripts/data/kazar_import_1103.csv  — import produktów z 11.03.2026
+  otcf4f/custom_scripts/data/kazar_import_1203.csv  — import produktów z 12.03.2026
+  Kazar/diagnostyka_unit_conversion_errors.txt       — ten plik
+  Kazar/data/kazar_diag_product.csv                  — pełny słownik produktów (302 709)
+  Kazar/data/Produkty nadrzędne - 20.03.2026.xlsx    — produkty nadrzędne z GUI (87 175)
+  Kazar/data/Jednostki miary 20.03.2026.xlsx         — jednostki miary z GUI (15)
+  Kazar/data/Przeliczenia jednostek 20.03.2026.xlsx  — grupy przelicznikowe z GUI (4)
+  Kazar/data/1773969324676.parquet                   — sklepy/MOS (114)
+  Kazar/data/Asortyment handlowy 20.03.2026.csv      — asortyment handlowy (58 014 wpisów)
+
+================================================================================
+Koniec dokumentu. Ostatnia aktualizacja: 2026-03-20 (sesja 4 — root cause: zmiana SZT_PARA + reimport asortymentu)
+================================================================================

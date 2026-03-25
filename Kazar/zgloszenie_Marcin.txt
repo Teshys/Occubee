@@ -1,0 +1,65 @@
+1. PROBLEM
+----------
+Od 12.03.2026 błędy przy generowaniu poleceń komisjonowania:
+- FRO1003: "Brak przelicznika z jedn. stanu magazynowego do sprzedażowej"
+- FRO1004: "Brak przelicznika z jedn. stanu sklepowego do sprzedażowej"
+- FRO1008: "Brak przelicznika z jedn. towaru w drodze do sprzedażowej"
+Konwersja: Sztuka → Para. Błędy narastają (6 → 23 → 48 dziennie).
+
+2. DOTKNIĘTE PRODUKTY
+---------------------
+- 9 parentów, 32+ wariantów (buty, akcesoria)
+- Wszystkie warianty: is_active=False, parent: is_active=True
+- Grupa przelicznikowa: SZT_PARA (przypisana poprawnie)
+- Przelicznik SZT→PAR=1 istnieje, jest aktywny, bez ograniczeń dat
+- Magazyny: NMZK, NMKC | Sklepy: ZOK, NZIK, NZIK_ZLD
+
+Kody parentów:
+  86102-XX-13  (Ladies shoes JOSEFIN, ZŁOTY)
+  96509-01-00  (Ladies shoes KS MARGIE, CZARNY)
+  96509-01-85  (Ladies shoes KS MARGIE, JASNONIEBIESKI)
+  96510-01-B6  (Ladies shoes KS EDITTE, OFF WHITE)
+  96510-08-85  (Ladies shoes KS EDITTE, JASNONIEBIESKI)
+  60134-01-24  (Ladies accessories FRIO, KARMELOWY)
+  41490-Z2-02  (Ladies shoes SIMONETTA, BRĄZOWY)
+  89146-TT-18  (Ladies accessories, RUDY)
+  89095-XX-02  (Men's shoes TRUXTON, BRĄZOWY)
+
+Kody błędnych wariantów:
+  86102-XX-13/35, /36, /37, /38, /39, /40
+  96509-01-00/36, /37, /38, /39, /40
+  96509-01-85/35, /36, /37, /38, /39, /40, /41
+  96510-01-B6/35, /36, /37, /38, /39, /40
+  96510-08-85/36, /37, /38, /39
+  60134-01-24/S
+  41490-Z2-02/37
+  89146-TT-18/M
+  89095-XX-02/42
+
+3. CO ZROBIONO PRZED WYSTĄPIENIEM BŁĘDÓW (trigger)
+---------------------------------------------------
+10.03 — Dodano 3 nowe jednostki miary: 5pak, 6pak, 12pak
+         (flagi: sprzedażowa=TAK, magazynowa=TAK)
+10.03 — Dodano 3 nowe pozycje do grupy SZT_PARA:
+         SZT→5pak=5, SZT→6pak=6, SZT→12pak=12
+         (wcześniej grupa miała TYLKO SZT→PAR=1)
+10.03 — Reimport całego asortymentu handlowego z GUI (58K wpisów)
+11.03 — Modyfikacja jednostki MB
+12.03 — BŁĘDY SIĘ ZACZĘŁY
+
+18.03 — Próba naprawy (Iza Kwaśniak): dezaktywacja grup 5pak/6pak/12pak,
+         modyfikacja SZT_PARA → błędy się nasiliły, nie pomogło
+
+4. STAN OBECNY GRUPY SZT_PARA
+------------------------------
+Aktywna, 4 pozycje:
+  SZT → PAR  = 1  (oryginalna)
+  SZT → 5pak = 5  (dodana 10.03)
+  SZT → 6pak = 6  (dodana 10.03)
+  SZT → 12pak = 12 (dodana 10.03)
+
+5. HIPOTEZA
+-----------
+Dodanie 3 konwersji do SZT_PARA stworzyło wieloznaczność w resolverze
+przeliczników (wiele celów z jednej jednostki źródłowej). Problem dotyka
+tylko nieaktywne warianty z fizycznym stockiem w ruchu.
